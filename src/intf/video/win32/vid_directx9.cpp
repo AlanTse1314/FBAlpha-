@@ -10,7 +10,7 @@
 // #define ENABLE_PROFILING FBA_DEBUG
 // #define LOAD_EFFECT_FROM_FILE
 
-#include <InitGuid.h>
+#include <guiddef.h>
 #define DIRECT3D_VERSION 0x0900							// Use this Direct3D version
 #define D3D_OVERLOADS
 #include <d3d9.h>
