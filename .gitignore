@@ -1,0 +1,5 @@
+obj/
+src/dep/generated/*
+gamelist.txt
+fba.exe
+fbad.exe
