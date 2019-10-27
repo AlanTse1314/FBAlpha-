@@ -73,6 +73,11 @@ else
 	NAME := $(NAME)$(CPUTYPE)
 endif
 
+# determine if cross-compiling
+HOST    = $(uname)
+ifeq (,$(findstring NT,$(HOST)))
+        CROSS = 1
+endif
 
 
 #
@@ -109,12 +114,15 @@ endif
 ifdef GCC510
 incdir	= $(foreach dir,$(alldir),-I$(srcdir)$(dir)) -I$(objdir)dep/generated -I$(srcdir)dep/mingw/include -I$(srcdir)dep/mingw/include/directx9 -I$(srcdir)dep/mingw/include/xaudio2
 endif
+ifdef CROSS
+incdir  = $(foreach dir,$(alldir),-I$(srcdir)$(dir)) -I$(objdir)dep/generated -I$(srcdir)dep/mingw/include -I$(srcdir)dep/mingw/include/directx9 -I$(srcdir)dep/mingw/include/xaudio2
+endif
 
 ifdef UNICODE
 # lib	= -lunicows
 endif
 
-lib	+=	-luser32 -lgdi32 -lcomdlg32 -lcomctl32 -lshell32 -lwinmm -lshlwapi -ladvapi32 -lsetupapi -lole32 -luuid -lwininet
+lib	+=	-luser32 -lgdi32 -lcomdlg32 -lcomctl32 -lshell32 -lwinmm -lshlwapi -ladvapi32 -lsetupapi -lole32 -luuid -lwininet -ldxguid -lxaudio2_8
 
 ifdef INCLUDE_AVI_RECORDING
 lib +=	-lvfw32
@@ -129,6 +137,8 @@ drvdep	= $(drvsrc:.o=.d)
 ifdef	BUILD_A68K
 a68k.o	= $(objdir)cpu/a68k/a68k.o
 endif
+
+	
 
 app_gnuc.rc = $(srcdir)dep/generated/app_gnuc.rc
 license.rtf = $(srcdir)dep/generated/license.rtf
@@ -178,8 +188,16 @@ autdrv := $(drvsrc:.cpp=.o)
 #
 #
 
-CC	= gcc
-CXX	= g++
+ifdef CROSS
+	ifdef BUILD_X64_EXE
+		PREFIX  = x86_64-w64-mingw32-
+	else
+		PREFIX  = i686-w64-mingw32-
+	endif
+endif
+
+CC	= $(PREFIX)gcc
+CXX	= $(PREFIX)g++
 LD	= $(CXX)
 AS	= nasm
 
@@ -292,6 +310,29 @@ else
 	LDFLAGS += -m32
 endif
 endif
+
+ifdef CROSS
+CFLAGS   = -pipe \
+           -std=gnu99 -O1 \
+           -mwindows \
+           -fforce-addr -finline-limit=1200 -fthread-jumps \
+           -fexpensive-optimizations \
+           -Wall -Wno-long-long -Wno-sign-compare -Wno-uninitialized -Wno-unused \
+           -Wno-sequence-point -Wno-pedantic \
+           $(DEF) $(incdir)
+
+CXXFLAGS = -pipe \
+           -std=gnu++11 -O1 \
+           -mwindows \
+           -fforce-addr -finline-limit=1200 -fthread-jumps \
+           -fexpensive-optimizations -fcheck-new \
+           -Wall -W -pedantic -Wshadow -Wno-long-long -Wno-write-strings \
+           -Wunknown-pragmas -Wundef -Wno-conversion -Wno-missing-braces -Wno-multichar \
+           -Wuninitialized -Wpointer-arith -Wno-inline -Wno-address  -Wno-unused-value \
+           -Wno-unused-but-set-variable -Wno-sequence-point -Wno-narrowing -Wno-extra \
+           -Wno-pedantic \
+           $(DEF) $(incdir)
+endif 
 
 ASFLAGS	=  -O1 -f coff -w-orphan-labels
 
@@ -596,11 +637,12 @@ $(objdir)cpu/m68k/m68kops.o: $(objdir)cpu/m68k/m68kmake.exe $(objdir)dep/generat
 	@$(CC) $(CFLAGS) -c $(objdir)dep/generated/m68kops.c -o $(objdir)cpu/m68k/m68kops.o
 
 $(objdir)dep/generated/m68kops.h: $(objdir)cpu/m68k/m68kmake.exe $(srcdir)cpu/m68k/m68k_in.c
-	$(objdir)/cpu/m68k/m68kmake $(objdir)dep/generated/ $(srcdir)cpu/m68k/m68k_in.c
+	$(objdir)/cpu/m68k/m68kmake.exe $(objdir)dep/generated/ $(srcdir)cpu/m68k/m68k_in.c
 
 $(objdir)cpu/m68k/m68kmake.exe: $(srcdir)cpu/m68k/m68kmake.c
 	@echo Compiling Musashi MC680x0 core \(m68kmake.c\)...
-	@$(CC) $(CFLAGS) $(srcdir)cpu/m68k/m68kmake.c -o $(objdir)cpu/m68k/m68kmake.exe
+	# need to build using native cc to allow cross-compilations
+	@cc $(srcdir)cpu/m68k/m68kmake.c -o $(objdir)cpu/m68k/m68kmake.exe
 
 
 #
@@ -687,6 +729,13 @@ endif
 
 %.o:	%.rc
 	@echo Compiling resource file $(<F)...
+ifdef CROSS
+ifdef BUILD_X64_EXE
+	@x86_64-w64-mingw32-windres $(DEF) $< -o $(subst $(srcdir),$(objdir),$(<D))/$(@F) $(foreach dir,$(alldir),--include-dir $(srcdir)$(dir))
+else
+	@i686-w64-mingw32-windres $(DEF) $< -o $(subst $(srcdir),$(objdir),$(<D))/$(@F) $(foreach dir,$(alldir),--include-dir $(srcdir)$(dir))
+endif
+else
 ifdef GCC345
 	@windres $(DEF) $< -o $(subst $(srcdir),$(objdir),$(<D))/$(@F) $(foreach dir,$(alldir),--include-dir $(srcdir)$(dir))
 endif
@@ -707,7 +756,7 @@ else
 	@windres -F pe-i386 $(DEF) $< -o $(subst $(srcdir),$(objdir),$(<D))/$(@F) $(foreach dir,$(alldir),--include-dir $(srcdir)$(dir))
 endif
 endif
-
+endif
 #
 #	Generic rules for C/C++ files
 #
